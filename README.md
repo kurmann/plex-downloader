@@ -3,7 +3,7 @@
 
 Ein modernes und interaktives Kommandozeilen-Tool (CLI), um Filme von einem Plex-Server in **Originalqualität** (Direct Stream) herunterzuladen.
 
-Entwickelt mit Python, [Typer](https://typer.tiangolo.com/) und [Rich](https://rich.readthedocs.io/).
+Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) und [Rich](https://rich.readthedocs.io/).
 
 ![Demo Screenshot](assets/demo.png)
 
@@ -22,7 +22,7 @@ Um das Tool sauber isoliert von deinem System-Python zu nutzen, ist `pipx` der b
 
 ```bash
 # Direkt von GitHub installieren
-pipx install git+[https://github.com/kurmann/plex-downloader.git](https://github.com/DEIN_USERNAME/plex-downloader.git)
+pipx install git+[https://github.com/kurmann/plex-downloader.git](https://github.com/kurmann/plex-downloader.git)
 
 ```
 
@@ -32,7 +32,7 @@ Wenn du den Code verändern oder erweitern möchtest:
 
 1. Repository klonen:
 ```bash
-git clone [https://github.com/kurmann/plex-downloader.git](https://github.com/DEIN_USERNAME/plex-downloader.git)
+git clone [https://github.com/kurmann/plex-downloader.git](https://github.com/kurmann/plex-downloader.git)
 cd plex-downloader
 
 ```
