@@ -2,7 +2,6 @@ import typer
 import yaml
 import sys
 import os
-import requests
 from pathlib import Path
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
@@ -10,7 +9,9 @@ from plexapi.exceptions import Unauthorized
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TransferSpeedColumn, TimeRemainingColumn
+
+from plex_downloader.modules.downloader import download_video, download_episode, sanitize_filename
+from plex_downloader.modules.cleanup import cleanup_temp_files
 
 # --- KONFIGURATION ---
 APP_NAME = "plex-downloader"
@@ -33,47 +34,7 @@ def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         yaml.dump(data, f)
 
-def cleanup_temp_files():
-    """Prüft auf alte .temp Dateien und bietet deren Löschung an."""
-    config = load_config()
-    download_path = config.get("download_path")
-    
-    if not download_path:
-        return  # Keine Konfiguration vorhanden
-    
-    download_dir = Path(download_path)
-    if not download_dir.exists():
-        return
-    
-    # Suche nach .temp Dateien (rekursiv)
-    temp_files = list(download_dir.rglob("*.temp"))
-    
-    if not temp_files:
-        return  # Keine temp Dateien gefunden
-    
-    console.print(f"\n[yellow]Es wurden {len(temp_files)} alte .temp Datei(en) gefunden:[/yellow]")
-    for temp_file in temp_files:
-        file_size = temp_file.stat().st_size / (1024 * 1024)  # In MB
-        console.print(f"  - {temp_file.name} ({file_size:.2f} MB)")
-    
-    if Confirm.ask("\n[yellow]Möchtest du diese Dateien löschen?[/yellow]", default=True):
-        deleted_count = 0
-        failed_count = 0
-        for temp_file in temp_files:
-            try:
-                temp_file.unlink()
-                console.print(f"[green]Gelöscht: {temp_file.name}[/green]")
-                deleted_count += 1
-            except Exception as e:
-                console.print(f"[red]Fehler beim Löschen von {temp_file.name}: {e}[/red]")
-                failed_count += 1
-        
-        if failed_count == 0:
-            console.print(f"[bold green]Alle .temp Dateien wurden gelöscht.[/bold green]")
-        else:
-            console.print(f"[bold yellow]{deleted_count} Datei(en) gelöscht, {failed_count} Fehler.[/bold yellow]")
-    else:
-        console.print("[yellow]Übersprungen. Die .temp Dateien bleiben erhalten.[/yellow]")
+
 
 def get_plex_server() -> PlexServer:
     """Verbindet sich mit dem Plex Server basierend auf der Config."""
@@ -170,7 +131,8 @@ def setup():
 def search(query: str):
     """Sucht nach Filmen und TV Shows und bietet Download an."""
     # Cleanup alte temp Dateien vor der Suche
-    cleanup_temp_files()
+    config = load_config()
+    cleanup_temp_files(config.get("download_path"))
     
     plex = get_plex_server()
     
@@ -221,7 +183,9 @@ def search(query: str):
         if 0 <= selection_idx < len(results):
             selected_item = results[selection_idx]
             if selected_item.type == 'movie':
-                download_video(selected_item, plex)
+                config = load_config()
+                download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+                download_video(selected_item, plex, download_dir)
             else:  # show
                 handle_show_download(selected_item, plex)
         else:
@@ -313,7 +277,7 @@ def select_and_download_episode(show, plex):
             show_dir = download_dir / sanitize_filename(show.title)
             show_dir.mkdir(parents=True, exist_ok=True)
             
-            download_episode(episodes[episode_idx], show, plex, show_dir)
+            download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False)
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
     except ValueError:
@@ -362,176 +326,7 @@ def download_entire_show(show, plex):
     
     console.print(f"\n[bold green]Fertig! {episode_count - skipped_count} Episode(n) heruntergeladen, {skipped_count} übersprungen. 🎉[/bold green]")
 
-def download_episode(episode, show, plex, custom_dir=None, skip_existing_check=False):
-    """Lädt eine einzelne Episode herunter."""
-    config = load_config()
-    download_dir = custom_dir or Path(config.get("download_path", Path.home() / "Downloads"))
-    
-    # Hole die Mediendatei
-    if not episode.media or not episode.media[0].parts:
-        console.print(f"[red]Keine Mediendatei gefunden für {episode.title}[/red]")
-        return
-    
-    part = episode.media[0].parts[0]
-    
-    # Dateiname: "ShowName - S01E01 - Episode Title.mkv"
-    episode_num = f"S{episode.seasonNumber:02d}E{episode.index:02d}"
-    filename = f"{show.title} - {episode_num} - {episode.title}.{part.container}"
-    filename = sanitize_filename(filename)
-    
-    filepath = download_dir / filename
-    temp_filepath = download_dir / f"{filename}.temp"
-    
-    # Prüfen, ob Datei bereits existiert (nur wenn nicht schon im Batch-Modus übersprungen)
-    if not skip_existing_check and filepath.exists():
-        if not Confirm.ask(f"[yellow]Datei existiert bereits: {filename}. Überschreiben?[/yellow]"):
-            console.print("[yellow]Download übersprungen.[/yellow]")
-            return
-    
-    # Download URL generieren
-    download_url = plex.url(part.key) + f"?download=1&X-Plex-Token={plex._token}"
-    
-    console.print(f"Starte Download: [bold cyan]{filename}[/bold cyan]")
-    console.print(f"Ziel: {filepath}")
-    
-    # Download mit Requests & Rich Progress Bar
-    try:
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()  # Prüfe HTTP Status
-        total_size = int(response.headers.get('content-length', 0))
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-        ) as progress:
-            task = progress.add_task("[cyan]Downloading...", total=total_size)
-            
-            with open(temp_filepath, "wb") as file:
-                for data in response.iter_content(chunk_size=1024*1024): # 1MB Chunks
-                    file.write(data)
-                    progress.update(task, advance=len(data))
-        
-        # Download erfolgreich, Datei umbenennen (replace überschreibt atomisch)
-        temp_filepath.replace(filepath)
-        console.print(f"[green]Download abgeschlossen![/green]")
-        
-    except KeyboardInterrupt:
-        console.print(f"\n[yellow]Download abgebrochen.[/yellow]")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-        raise  # Re-raise um das Programm zu beenden
-    except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-    except IOError as e:
-        console.print(f"[bold red]Dateisystem-Fehler:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-    except Exception as e:
-        console.print(f"[bold red]Download Fehler:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
 
-def sanitize_filename(filename):
-    """Entfernt ungültige Zeichen aus Dateinamen."""
-    invalid_chars = '<>:"/\\|?*'
-    for char in invalid_chars:
-        filename = filename.replace(char, '-')
-    # Mehrfache Bindestriche durch einen ersetzen
-    while '--' in filename:
-        filename = filename.replace('--', '-')
-    # Bindestriche am Anfang und Ende entfernen
-    filename = filename.strip('-').strip()
-    # Maximale Länge begrenzen (255 ist typisches Filesystem-Limit)
-    if len(filename) > 200:  # Etwas Puffer für Erweiterung
-        name, ext = filename.rsplit('.', 1) if '.' in filename else (filename, '')
-        filename = name[:200] + ('.' + ext if ext else '')
-    return filename
-
-def download_video(video, plex):
-    """Lädt das Video mit Fortschrittsbalken herunter."""
-    config = load_config()
-    download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
-    
-    # Prüfen, ob Mediendatei vorhanden ist
-    if not video.media or not video.media[0].parts:
-        console.print(f"[red]Keine Mediendatei gefunden für {video.title}[/red]")
-        return
-    
-    # Wir nehmen den ersten Teil (Part) der ersten Mediendatei (normalerweise der Hauptfilm)
-    part = video.media[0].parts[0]
-    
-    # Dateiname bereinigen und Pfad bauen
-    filename = f"{video.title} ({video.year}).{part.container}"
-    filename = sanitize_filename(filename)
-    filepath = download_dir / filename
-    temp_filepath = download_dir / f"{filename}.temp"
-    
-    # Prüfen, ob Datei bereits existiert
-    if filepath.exists():
-        if not Confirm.ask(f"[yellow]Datei existiert bereits: {filename}. Überschreiben?[/yellow]"):
-            console.print("[yellow]Download übersprungen.[/yellow]")
-            return
-    
-    # Download URL generieren (Direct Stream / Original)
-    download_url = plex.url(part.key) + f"?download=1&X-Plex-Token={plex._token}"
-    
-    console.print(f"\nStarte Download: [bold cyan]{filename}[/bold cyan]")
-    console.print(f"Ziel: {filepath}")
-    
-    # Download mit Requests & Rich Progress Bar
-    try:
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()  # Prüfe HTTP Status
-        total_size = int(response.headers.get('content-length', 0))
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-        ) as progress:
-            task = progress.add_task("[cyan]Downloading...", total=total_size)
-            
-            with open(temp_filepath, "wb") as file:
-                for data in response.iter_content(chunk_size=1024*1024): # 1MB Chunks
-                    file.write(data)
-                    progress.update(task, advance=len(data))
-        
-        # Download erfolgreich, Datei umbenennen (replace überschreibt atomisch)
-        temp_filepath.replace(filepath)
-        console.print(f"[bold green]Download abgeschlossen![/bold green] 🎉")
-        
-    except KeyboardInterrupt:
-        console.print(f"\n[yellow]Download abgebrochen.[/yellow]")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-        raise  # Re-raise um das Programm zu beenden
-    except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-    except IOError as e:
-        console.print(f"[bold red]Dateisystem-Fehler:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
-    except Exception as e:
-        console.print(f"[bold red]Download Fehler:[/bold red] {e}")
-        # Lösche unvollständige temp Datei
-        if temp_filepath.exists():
-            temp_filepath.unlink()
 
 def start():
     app()
