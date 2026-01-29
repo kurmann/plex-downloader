@@ -1,7 +1,7 @@
 
 # Plex Downloader CLI
 
-Ein modernes und interaktives Kommandozeilen-Tool (CLI), um Filme von einem Plex-Server in **Originalqualität** (Direct Stream) herunterzuladen.
+Ein modernes und interaktives Kommandozeilen-Tool (CLI), um Filme und TV Shows von einem Plex-Server in **Originalqualität** (Direct Stream) herunterzuladen.
 
 Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) und [Rich](https://rich.readthedocs.io/).
 
@@ -9,7 +9,8 @@ Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) 
 
 ## Features
 
-* **Interaktive Suche:** Suche blitzschnell nach Filmen in deinen Plex-Bibliotheken.
+* **Interaktive Suche:** Suche blitzschnell nach Filmen und TV Shows in deinen Plex-Bibliotheken.
+* **TV Show Support:** Lade ganze Serien oder einzelne Episoden herunter.
 * **Originalqualität:** Lädt die rohe Videodatei (z. B. MKV, MP4) herunter, ohne Transcodierung oder Qualitätsverlust.
 * **Schicke UI:** Fortschrittsbalken, farbige Ausgaben und formatierte Tabellen.
 * **Sicherer Login:** Verbindet sich mit deinen Plex-Zugangsdaten und nutzt Tokens zur Authentifizierung.
@@ -69,12 +70,14 @@ plex-dl setup
 
 ### 2. Suchen & Herunterladen
 
-Suche nach einem Filmtitel. Das Tool zeigt dir alle Treffer an und lässt dich auswählen, welchen du laden möchtest.
+Suche nach einem Film- oder Serientitel. Das Tool zeigt dir alle Treffer an und lässt dich auswählen, welchen du laden möchtest.
 
 ```bash
 plex-dl search "Inception"
 
 ```
+
+Für TV Shows wirst du gefragt, ob du die ganze Serie oder nur eine bestimmte Episode herunterladen möchtest.
 
 ### Konfiguration
 
