@@ -3,6 +3,8 @@ import yaml
 import sys
 import os
 from pathlib import Path
+from datetime import datetime, time, timedelta
+import time as time_module
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
 from plexapi.exceptions import Unauthorized
@@ -33,6 +35,60 @@ def save_config(data):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         yaml.dump(data, f)
+
+def calculate_wait_until_2am():
+    """Berechnet die Wartezeit bis 2 Uhr morgens in Sekunden."""
+    now = datetime.now()
+    target_time = time(2, 0)  # 2:00 AM
+    
+    # Erstelle datetime für heute um 2 Uhr
+    today_target = datetime.combine(now.date(), target_time)
+    
+    # Wenn es bereits nach 2 Uhr ist, nimm morgen 2 Uhr
+    if now.time() >= target_time:
+        tomorrow = now.date() + timedelta(days=1)
+        target_datetime = datetime.combine(tomorrow, target_time)
+    else:
+        target_datetime = today_target
+    
+    # Berechne die Differenz in Sekunden
+    wait_seconds = (target_datetime - now).total_seconds()
+    return wait_seconds, target_datetime
+
+def wait_until_2am():
+    """Wartet bis 2 Uhr morgens und zeigt die Restzeit an."""
+    wait_seconds, target_datetime = calculate_wait_until_2am()
+    
+    console.print(f"\n[bold cyan]Geplanter Download um 2:00 Uhr[/bold cyan]")
+    console.print(f"Aktuelle Zeit: {datetime.now().strftime('%H:%M:%S')}")
+    console.print(f"Zielzeit: {target_datetime.strftime('%d.%m.%Y %H:%M:%S')}")
+    console.print(f"Wartezeit: {int(wait_seconds // 3600)} Stunden, {int((wait_seconds % 3600) // 60)} Minuten\n")
+    console.print("[yellow]Die Anwendung wartet nun bis 2 Uhr morgens...[/yellow]")
+    console.print("[dim]Drücke Ctrl+C zum Abbrechen[/dim]\n")
+    
+    try:
+        # Warte in Intervallen und zeige Fortschritt
+        interval = 60  # Alle 60 Sekunden aktualisieren
+        elapsed = 0
+        
+        while elapsed < wait_seconds:
+            time_to_wait = min(interval, wait_seconds - elapsed)
+            time_module.sleep(time_to_wait)
+            elapsed += time_to_wait
+            
+            remaining = wait_seconds - elapsed
+            hours = int(remaining // 3600)
+            minutes = int((remaining % 3600) // 60)
+            
+            if remaining > 0:
+                console.print(f"[dim]Verbleibende Zeit: {hours:02d}:{minutes:02d} Stunden[/dim]")
+        
+        console.print("\n[bold green]2 Uhr erreicht! Starte Download...[/bold green]\n")
+        return True
+        
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Warten abgebrochen. Anwendung wird beendet.[/yellow]")
+        sys.exit(0)
 
 def configure_plex_account(existing_config):
     """Konfiguriert nur Plex Account und Server."""
@@ -274,7 +330,10 @@ def setup():
     config()
 
 @app.command()
-def search(query: str):
+def search(
+    query: str,
+    at_night: bool = typer.Option(False, "--at-night", help="Plant den Download für 2 Uhr morgens")
+):
     """Sucht nach Filmen und TV Shows und bietet Download an."""
     # Prüfe ob Konfiguration existiert
     config_data = load_config()
@@ -286,6 +345,10 @@ def search(query: str):
         if not config_data.get("token") or not config_data.get("server_name"):
             console.print("[red]Konfiguration unvollständig. Bitte führe 'plex-dl config' aus.[/red]")
             sys.exit(1)
+    
+    # Wenn geplanter Download, warte bis 2 Uhr
+    if at_night:
+        wait_until_2am()
     
     # Cleanup alte temp Dateien vor der Suche
     cleanup_temp_files(config_data.get("download_path"))
@@ -300,6 +363,10 @@ def search(query: str):
     
     if not results:
         console.print(f"[yellow]Keine Ergebnisse gefunden für '{query}'.[/yellow]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
 
     # Tabelle zur Anzeige
@@ -332,26 +399,52 @@ def search(query: str):
     )
     
     if choice.lower() == 'q':
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
 
     try:
         selection_idx = int(choice) - 1
         if 0 <= selection_idx < len(results):
             selected_item = results[selection_idx]
-            if selected_item.type == 'movie':
-                config_data = load_config()
-                download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
-                # Keep media_server_path as string to support both local and remote paths
-                media_server_path = config_data.get("media_server_path")
-                download_video(selected_item, plex, download_dir, media_server_path)
-            else:  # show
-                handle_show_download(selected_item, plex)
+            try:
+                if selected_item.type == 'movie':
+                    config_data = load_config()
+                    download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
+                    # Keep media_server_path as string to support both local and remote paths
+                    media_server_path = config_data.get("media_server_path")
+                    download_video(selected_item, plex, download_dir, media_server_path)
+                else:  # show
+                    handle_show_download(selected_item, plex, at_night)
+                
+                # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
+                if at_night:
+                    console.print("\n[bold green]Download abgeschlossen. Anwendung wird beendet.[/bold green]")
+                    sys.exit(0)
+                    
+            except Exception as e:
+                console.print(f"[bold red]Fehler beim Download:[/bold red] {e}")
+                # Beende die Anwendung auch bei Fehler wenn --at-night verwendet wurde
+                if at_night:
+                    console.print("[red]Anwendung wird aufgrund eines Fehlers beendet.[/red]")
+                    sys.exit(1)
+                raise
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
+            # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+            if at_night:
+                console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
     except ValueError:
         console.print("[red]Bitte eine Zahl eingeben.[/red]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
 
-def handle_show_download(show, plex):
+def handle_show_download(show, plex, at_night: bool = False):
     """Behandelt den Download einer TV-Show."""
     console.print(f"\n[bold magenta]{show.title}[/bold magenta]")
     console.print("\nWas möchtest du herunterladen?")
@@ -366,6 +459,10 @@ def handle_show_download(show, plex):
     )
     
     if choice == "q":
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
     elif choice == "1":
         # Ganze Serie herunterladen
@@ -373,9 +470,9 @@ def handle_show_download(show, plex):
             download_entire_show(show, plex)
     elif choice == "2":
         # Bestimmte Episode auswählen
-        select_and_download_episode(show, plex)
+        select_and_download_episode(show, plex, at_night)
 
-def select_and_download_episode(show, plex):
+def select_and_download_episode(show, plex, at_night: bool = False):
     """Lässt den Benutzer eine bestimmte Episode auswählen und lädt sie herunter."""
     seasons = show.seasons()
     
@@ -390,6 +487,10 @@ def select_and_download_episode(show, plex):
     )
     
     if season_choice.lower() == "q":
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
     
     try:
@@ -398,9 +499,17 @@ def select_and_download_episode(show, plex):
             selected_season = seasons[season_idx]
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
+            # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+            if at_night:
+                console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
             return
     except ValueError:
         console.print("[red]Bitte eine Zahl eingeben.[/red]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
     
     # Episode auswählen
@@ -424,6 +533,10 @@ def select_and_download_episode(show, plex):
     )
     
     if episode_choice.lower() == "q":
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
         return
     
     try:
@@ -440,8 +553,16 @@ def select_and_download_episode(show, plex):
             download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False, media_server_path=media_server_path)
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
+            # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+            if at_night:
+                console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
     except ValueError:
         console.print("[red]Bitte eine Zahl eingeben.[/red]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
 
 def download_entire_show(show, plex):
     """Lädt alle Episoden einer TV-Show herunter."""
