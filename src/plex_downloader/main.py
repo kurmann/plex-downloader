@@ -57,13 +57,21 @@ def cleanup_temp_files():
         console.print(f"  - {temp_file.name} ({file_size:.2f} MB)")
     
     if Confirm.ask("\n[yellow]Möchtest du diese Dateien löschen?[/yellow]", default=True):
+        deleted_count = 0
+        failed_count = 0
         for temp_file in temp_files:
             try:
                 temp_file.unlink()
                 console.print(f"[green]Gelöscht: {temp_file.name}[/green]")
+                deleted_count += 1
             except Exception as e:
                 console.print(f"[red]Fehler beim Löschen von {temp_file.name}: {e}[/red]")
-        console.print(f"[bold green]Alle .temp Dateien wurden gelöscht.[/bold green]")
+                failed_count += 1
+        
+        if failed_count == 0:
+            console.print(f"[bold green]Alle .temp Dateien wurden gelöscht.[/bold green]")
+        else:
+            console.print(f"[bold yellow]{deleted_count} Datei(en) gelöscht, {failed_count} Fehler.[/bold yellow]")
     else:
         console.print("[yellow]Übersprungen. Die .temp Dateien bleiben erhalten.[/yellow]")
 
@@ -161,7 +169,7 @@ def setup():
 @app.command()
 def search(query: str):
     """Sucht nach Filmen und TV Shows und bietet Download an."""
-    # Cleanup alte temp Dateien beim ersten Download-Aufruf
+    # Cleanup alte temp Dateien vor der Suche
     cleanup_temp_files()
     
     plex = get_plex_server()
@@ -406,10 +414,16 @@ def download_episode(episode, show, plex, custom_dir=None, skip_existing_check=F
                     file.write(data)
                     progress.update(task, advance=len(data))
         
-        # Download erfolgreich, Datei umbenennen
-        temp_filepath.rename(filepath)
+        # Download erfolgreich, Datei umbenennen (replace überschreibt atomisch)
+        temp_filepath.replace(filepath)
         console.print(f"[green]Download abgeschlossen![/green]")
         
+    except KeyboardInterrupt:
+        console.print(f"\n[yellow]Download abgebrochen.[/yellow]")
+        # Lösche unvollständige temp Datei
+        if temp_filepath.exists():
+            temp_filepath.unlink()
+        raise  # Re-raise um das Programm zu beenden
     except requests.exceptions.RequestException as e:
         console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
         # Lösche unvollständige temp Datei
@@ -493,10 +507,16 @@ def download_video(video, plex):
                     file.write(data)
                     progress.update(task, advance=len(data))
         
-        # Download erfolgreich, Datei umbenennen
-        temp_filepath.rename(filepath)
+        # Download erfolgreich, Datei umbenennen (replace überschreibt atomisch)
+        temp_filepath.replace(filepath)
         console.print(f"[bold green]Download abgeschlossen![/bold green] 🎉")
         
+    except KeyboardInterrupt:
+        console.print(f"\n[yellow]Download abgebrochen.[/yellow]")
+        # Lösche unvollständige temp Datei
+        if temp_filepath.exists():
+            temp_filepath.unlink()
+        raise  # Re-raise um das Programm zu beenden
     except requests.exceptions.RequestException as e:
         console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
         # Lösche unvollständige temp Datei
