@@ -455,6 +455,8 @@ def handle_show_download(show, plex):
             # Ask about timing after user confirms downloading entire series
             ask_download_timing()
             download_entire_show(show, plex)
+        else:
+            console.print("[yellow]Download abgebrochen.[/yellow]")
     elif choice == "2":
         # Bestimmte Episode auswählen
         select_and_download_episode(show, plex)
