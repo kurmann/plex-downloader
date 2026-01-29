@@ -395,29 +395,30 @@ def search(query: str):
         if 0 <= selection_idx < len(results):
             selected_item = results[selection_idx]
             
-            # Ask user if they want to download now or at night (after selection)
-            console.print("\n[bold]Wann möchtest du den Download starten?[/bold]")
-            console.print("1. Jetzt sofort")
-            console.print("2. Um 2:00 Uhr morgens")
-            
-            download_timing = Prompt.ask(
-                "Wähle eine Option",
-                choices=["1", "2"],
-                default="1"
-            )
-            
-            # Wait until 2am if user chose option 2
-            if download_timing == "2":
-                wait_until_2am()
-            
             try:
                 if selected_item.type == 'movie':
+                    # For movies, ask about timing before download
+                    console.print("\n[bold]Wann möchtest du den Download starten?[/bold]")
+                    console.print("1. Jetzt sofort")
+                    console.print("2. Um 2:00 Uhr morgens")
+                    
+                    download_timing = Prompt.ask(
+                        "Wähle eine Option",
+                        choices=["1", "2"],
+                        default="1"
+                    )
+                    
+                    # Wait until 2am if user chose option 2
+                    if download_timing == "2":
+                        wait_until_2am()
+                    
                     config_data = load_config()
                     download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
                     # Keep media_server_path as string to support both local and remote paths
                     media_server_path = config_data.get("media_server_path")
                     download_video(selected_item, plex, download_dir, media_server_path)
                 else:  # show
+                    # For TV shows, let user select episodes first, then ask about timing
                     handle_show_download(selected_item, plex)
                     
             except Exception as e:
@@ -447,6 +448,21 @@ def handle_show_download(show, plex):
     elif choice == "1":
         # Ganze Serie herunterladen
         if Confirm.ask(f"Möchtest du wirklich die ganze Serie '{show.title}' herunterladen?"):
+            # Ask about timing after user confirms downloading entire series
+            console.print("\n[bold]Wann möchtest du den Download starten?[/bold]")
+            console.print("1. Jetzt sofort")
+            console.print("2. Um 2:00 Uhr morgens")
+            
+            download_timing = Prompt.ask(
+                "Wähle eine Option",
+                choices=["1", "2"],
+                default="1"
+            )
+            
+            # Wait until 2am if user chose option 2
+            if download_timing == "2":
+                wait_until_2am()
+            
             download_entire_show(show, plex)
     elif choice == "2":
         # Bestimmte Episode auswählen
@@ -506,6 +522,21 @@ def select_and_download_episode(show, plex):
     try:
         episode_idx = int(episode_choice) - 1
         if 0 <= episode_idx < len(episodes):
+            # Ask about timing after user has selected the specific episode
+            console.print("\n[bold]Wann möchtest du den Download starten?[/bold]")
+            console.print("1. Jetzt sofort")
+            console.print("2. Um 2:00 Uhr morgens")
+            
+            download_timing = Prompt.ask(
+                "Wähle eine Option",
+                choices=["1", "2"],
+                default="1"
+            )
+            
+            # Wait until 2am if user chose option 2
+            if download_timing == "2":
+                wait_until_2am()
+            
             # Erstelle einen Ordner für die Show (Konsistenz mit vollständigem Download)
             config_data = load_config()
             download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
