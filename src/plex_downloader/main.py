@@ -92,11 +92,29 @@ def setup():
         choice = int(Prompt.ask("Wähle einen Server (Nummer)", choices=[str(i) for i in range(1, len(resources)+1)]))
         selected_server = resources[choice-1]
         
+        # Download-Pfad abfragen
+        default_download_path = str(Path.home() / "Downloads")
+        download_path = Prompt.ask(
+            "Download-Verzeichnis", 
+            default=default_download_path
+        )
+        
+        # Pfad validieren und ggf. erstellen
+        download_dir = Path(download_path).expanduser().resolve()
+        if not download_dir.exists():
+            if Confirm.ask(f"Das Verzeichnis existiert nicht. Soll es erstellt werden?"):
+                download_dir.mkdir(parents=True, exist_ok=True)
+                console.print(f"[green]Verzeichnis erstellt: {download_dir}[/green]")
+            else:
+                console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
+                download_dir = Path(default_download_path)
+                download_dir.mkdir(parents=True, exist_ok=True)
+        
         # Config speichern
         config = {
             "token": account.authenticationToken,
             "server_name": selected_server.name,
-            "download_path": str(Path.home() / "Downloads") # Default
+            "download_path": str(download_dir)
         }
         save_config(config)
         console.print(f"[bold green]Konfiguration gespeichert unter {CONFIG_FILE}![/bold green]")
