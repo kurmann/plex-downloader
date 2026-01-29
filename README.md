@@ -11,6 +11,7 @@ Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) 
 
 * **Interaktive Suche:** Suche blitzschnell nach Filmen und TV Shows in deinen Plex-Bibliotheken.
 * **TV Show Support:** Lade ganze Serien oder einzelne Episoden herunter.
+* **Medienserver-Integration:** Automatisches Verschieben von Downloads zum Medienserver (lokal oder per rclone zu NAS/Cloud).
 * **Originalqualität:** Lädt die rohe Videodatei (z. B. MKV, MP4) herunter, ohne Transcodierung oder Qualitätsverlust.
 * **Schicke UI:** Fortschrittsbalken, farbige Ausgaben und formatierte Tabellen.
 * **Sicherer Login:** Verbindet sich mit deinen Plex-Zugangsdaten und nutzt Tokens zur Authentifizierung.
@@ -79,12 +80,33 @@ plex-dl search "Inception"
 
 Für TV Shows wirst du gefragt, ob du die ganze Serie oder nur eine bestimmte Episode herunterladen möchtest.
 
+### 3. Medienserver-Integration
+
+Bei der Erstkonfiguration (`plex-dl setup`) kannst du optional ein Medienserver-Verzeichnis konfigurieren. Nach jedem erfolgreichen Download werden die Dateien automatisch dorthin verschoben.
+
+**Beispiele:**
+- Lokaler Pfad: `/mnt/media` oder `~/Media`
+- rclone Remote: `mynas:media/plex` (für NAS oder Cloud-Speicher)
+
+**Vorteile:**
+- Automatische Organisation der Medienbibliothek
+- Bei Serien wird jede Episode sofort nach Download verschoben → Platz wird für die nächste Episode frei
+- Unterstützt sowohl lokale als auch Remote-Ziele via rclone
+
+**Hinweis:** Falls rclone nicht installiert ist, erfolgt bei lokalen Pfaden ein automatischer Fallback auf Python's Standardmethoden.
+
 ### Konfiguration
 
 Die Konfigurationsdatei wird standardmäßig hier gespeichert:
 `~/.config/plex-downloader/config.yaml`
 
-Dort kannst du bei Bedarf den Standard-Downloadpfad manuell anpassen.
+Dort kannst du bei Bedarf den Standard-Downloadpfad und Medienserver-Pfad manuell anpassen.
+
+**Konfigurationsoptionen:**
+- `download_path`: Temporäres Verzeichnis für Downloads
+- `media_server_path`: Zielverzeichnis für fertige Downloads (optional, lokal oder rclone remote)
+- `token`: Plex Authentifizierungs-Token
+- `server_name`: Name deines Plex-Servers
 
 ## Projektstruktur
 
@@ -96,7 +118,11 @@ plex-downloader/
 ├── src/
 │   └── plex_downloader/
 │       ├── __init__.py
-│       └── main.py      # Die Hauptlogik der Applikation
+│       ├── main.py      # Die Hauptlogik der Applikation
+│       └── modules/
+│           ├── downloader.py     # Download-Logik
+│           ├── rclone_mover.py   # Medienserver-Integration
+│           └── cleanup.py        # Temporäre Dateien bereinigen
 
 ```
 
