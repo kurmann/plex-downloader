@@ -2,6 +2,7 @@
 
 import requests
 from pathlib import Path
+from typing import Union, Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TransferSpeedColumn, TimeRemainingColumn
 from rich.prompt import Confirm
@@ -89,7 +90,7 @@ def download_file(download_url: str, filepath: Path, temp_filepath: Path, filena
         return False
 
 
-def download_video(video, plex, download_dir: Path, media_server_path: Path = None) -> bool:
+def download_video(video, plex, download_dir: Path, media_server_path: Optional[Union[str, Path]] = None) -> bool:
     """
     Lädt ein Video herunter.
     
@@ -97,7 +98,7 @@ def download_video(video, plex, download_dir: Path, media_server_path: Path = No
         video: Das Plex Video-Objekt
         plex: Die Plex Server-Verbindung
         download_dir: Das Zielverzeichnis
-        media_server_path: Optionaler Pfad zum Medienserver für automatisches Verschieben
+        media_server_path: Optionaler Pfad zum Medienserver für automatisches Verschieben (kann lokaler Pfad oder rclone remote sein)
         
     Returns:
         True wenn der Download erfolgreich war, False sonst
@@ -138,7 +139,7 @@ def download_video(video, plex, download_dir: Path, media_server_path: Path = No
     return success
 
 
-def download_episode(episode, show, plex, download_dir: Path, skip_existing_check: bool = False, media_server_path: Path = None) -> bool:
+def download_episode(episode, show, plex, download_dir: Path, skip_existing_check: bool = False, media_server_path: Optional[Union[str, Path]] = None) -> bool:
     """
     Lädt eine einzelne Episode herunter.
     
@@ -148,7 +149,7 @@ def download_episode(episode, show, plex, download_dir: Path, skip_existing_chec
         plex: Die Plex Server-Verbindung
         download_dir: Das Zielverzeichnis
         skip_existing_check: Ob die Prüfung auf existierende Dateien übersprungen werden soll
-        media_server_path: Optionaler Pfad zum Medienserver für automatisches Verschieben
+        media_server_path: Optionaler Pfad zum Medienserver für automatisches Verschieben (kann lokaler Pfad oder rclone remote sein)
         
     Returns:
         True wenn der Download erfolgreich war, False sonst
@@ -184,7 +185,14 @@ def download_episode(episode, show, plex, download_dir: Path, skip_existing_chec
         from plex_downloader.modules.rclone_mover import move_to_media_server
         
         # Erstelle Show-Verzeichnis auf Medienserver
-        show_media_dir = media_server_path / sanitize_filename(show.title)
+        # Für rclone remotes verwende String-Konkatenation, für lokale Pfade Path-Objekte
+        if isinstance(media_server_path, str) and ":" in media_server_path:
+            # rclone remote path
+            show_media_dir = f"{media_server_path}/{sanitize_filename(show.title)}"
+        else:
+            # lokaler Pfad
+            show_media_dir = Path(media_server_path) / sanitize_filename(show.title)
+        
         move_success = move_to_media_server(filepath, show_media_dir)
         if not move_success:
             console.print(f"[yellow]Episode verbleibt im Download-Verzeichnis: {filepath}[/yellow]")
