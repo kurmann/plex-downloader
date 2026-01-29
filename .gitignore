@@ -1,0 +1,9 @@
+# .gitignore
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+config.yaml
+*.egg-info/
+dist/
+build/

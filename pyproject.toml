@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plex-downloader"
+version = "0.1.0"
+description = "CLI Tool zum Downloaden von Original-Dateien aus Plex"
+requires-python = ">=3.8"
+dependencies = [
+    "typer",
+    "rich",
+    "PlexAPI",
+    "PyYAML",
+    "requests"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+# Hier definieren wir den Terminal-Befehl "plex-dl"
+plex-dl = "plex_downloader.main:start"
