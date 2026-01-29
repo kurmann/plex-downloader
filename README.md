@@ -101,7 +101,7 @@ Im Nachtmodus:
 
 **Beispiel:**
 ```bash
-# Normale Download (sofort)
+# Normaler Download (sofort)
 plex-dl search "The Matrix"
 
 # Geplanter Download um 2 Uhr morgens

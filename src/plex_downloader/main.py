@@ -430,7 +430,8 @@ def search(
                 if at_night:
                     console.print("[red]Anwendung wird aufgrund eines Fehlers beendet.[/red]")
                     sys.exit(1)
-                raise
+                else:
+                    raise
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
             # Beende die Anwendung automatisch wenn --at-night verwendet wurde
@@ -467,7 +468,16 @@ def handle_show_download(show, plex, at_night: bool = False):
     elif choice == "1":
         # Ganze Serie herunterladen
         if Confirm.ask(f"Möchtest du wirklich die ganze Serie '{show.title}' herunterladen?"):
-            download_entire_show(show, plex)
+            download_entire_show(show, plex, at_night)
+            # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
+            if at_night:
+                console.print("\n[bold green]Download abgeschlossen. Anwendung wird beendet.[/bold green]")
+                sys.exit(0)
+        else:
+            # Benutzer hat abgebrochen
+            if at_night:
+                console.print("[yellow]Download abgebrochen. Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
     elif choice == "2":
         # Bestimmte Episode auswählen
         select_and_download_episode(show, plex, at_night)
@@ -551,6 +561,11 @@ def select_and_download_episode(show, plex, at_night: bool = False):
             show_dir.mkdir(parents=True, exist_ok=True)
             
             download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False, media_server_path=media_server_path)
+            
+            # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
+            if at_night:
+                console.print("\n[bold green]Download abgeschlossen. Anwendung wird beendet.[/bold green]")
+                sys.exit(0)
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
             # Beende die Anwendung automatisch wenn --at-night verwendet wurde
@@ -564,7 +579,7 @@ def select_and_download_episode(show, plex, at_night: bool = False):
             console.print("[yellow]Anwendung wird beendet.[/yellow]")
             sys.exit(0)
 
-def download_entire_show(show, plex):
+def download_entire_show(show, plex, at_night: bool = False):
     """Lädt alle Episoden einer TV-Show herunter."""
     config_data = load_config()
     download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
