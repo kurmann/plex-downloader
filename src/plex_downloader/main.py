@@ -106,7 +106,7 @@ def configure_media_path(existing_config):
     
     default_media_path = existing_config.get("media_server_path", str(Path.home() / "Media"))
     media_path = Prompt.ask(
-        "Medienserver-Verzeichnis (Ziel für fertige Downloads, z.B. lokaler Pfad oder rclone remote wie 'mynas:media')",
+        "Medienserver-Verzeichnis (Ziel für fertige Downloads, z.B. lokaler Pfad oder rclone remote wie 'mynas:media') (ohne Quotes eingeben)",
         default=default_media_path
     )
     
