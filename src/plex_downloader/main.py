@@ -98,7 +98,7 @@ def setup():
         # Download-Pfad abfragen
         default_download_path = str(Path.home() / "Downloads")
         download_path = Prompt.ask(
-            "Download-Verzeichnis", 
+            "Download-Verzeichnis (temporär)", 
             default=default_download_path
         )
         
@@ -113,11 +113,30 @@ def setup():
                 download_dir = Path(default_download_path)
                 download_dir.mkdir(parents=True, exist_ok=True)
         
+        # Medienserver-Pfad abfragen
+        default_media_path = str(Path.home() / "Media")
+        media_path = Prompt.ask(
+            "Medienserver-Verzeichnis (Ziel für fertige Downloads)",
+            default=default_media_path
+        )
+        
+        # Pfad validieren und ggf. erstellen
+        media_dir = Path(media_path).expanduser().resolve()
+        if not media_dir.exists():
+            if Confirm.ask(f"Das Verzeichnis existiert nicht. Soll es erstellt werden?"):
+                media_dir.mkdir(parents=True, exist_ok=True)
+                console.print(f"[green]Verzeichnis erstellt: {media_dir}[/green]")
+            else:
+                console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
+                media_dir = Path(default_media_path)
+                media_dir.mkdir(parents=True, exist_ok=True)
+        
         # Config speichern
         config = {
             "token": account.authenticationToken,
             "server_name": selected_server.name,
-            "download_path": str(download_dir)
+            "download_path": str(download_dir),
+            "media_server_path": str(media_dir)
         }
         save_config(config)
         console.print(f"[bold green]Konfiguration gespeichert unter {CONFIG_FILE}![/bold green]")
@@ -185,7 +204,8 @@ def search(query: str):
             if selected_item.type == 'movie':
                 config = load_config()
                 download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
-                download_video(selected_item, plex, download_dir)
+                media_server_path = Path(config.get("media_server_path")) if config.get("media_server_path") else None
+                download_video(selected_item, plex, download_dir, media_server_path)
             else:  # show
                 handle_show_download(selected_item, plex)
         else:
@@ -274,10 +294,11 @@ def select_and_download_episode(show, plex):
             # Erstelle einen Ordner für die Show (Konsistenz mit vollständigem Download)
             config = load_config()
             download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+            media_server_path = Path(config.get("media_server_path")) if config.get("media_server_path") else None
             show_dir = download_dir / sanitize_filename(show.title)
             show_dir.mkdir(parents=True, exist_ok=True)
             
-            download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False)
+            download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False, media_server_path=media_server_path)
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
     except ValueError:
@@ -287,6 +308,7 @@ def download_entire_show(show, plex):
     """Lädt alle Episoden einer TV-Show herunter."""
     config = load_config()
     download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+    media_server_path = Path(config.get("media_server_path")) if config.get("media_server_path") else None
     
     # Erstelle einen Ordner für die Show
     show_dir = download_dir / sanitize_filename(show.title)
@@ -322,7 +344,7 @@ def download_entire_show(show, plex):
                 skipped_count += 1
                 continue
                 
-            download_episode(episode, show, plex, show_dir, skip_existing_check=True)
+            download_episode(episode, show, plex, show_dir, skip_existing_check=True, media_server_path=media_server_path)
     
     console.print(f"\n[bold green]Fertig! {episode_count - skipped_count} Episode(n) heruntergeladen, {skipped_count} übersprungen. 🎉[/bold green]")
 
