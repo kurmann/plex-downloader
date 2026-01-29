@@ -262,7 +262,13 @@ def select_and_download_episode(show, plex):
     try:
         episode_idx = int(episode_choice) - 1
         if 0 <= episode_idx < len(episodes):
-            download_episode(episodes[episode_idx], show, plex)
+            # Erstelle einen Ordner für die Show (Konsistenz mit vollständigem Download)
+            config = load_config()
+            download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+            show_dir = download_dir / sanitize_filename(show.title)
+            show_dir.mkdir(parents=True, exist_ok=True)
+            
+            download_episode(episodes[episode_idx], show, plex, show_dir)
         else:
             console.print("[red]Ungültige Auswahl.[/red]")
     except ValueError:
@@ -285,15 +291,33 @@ def download_entire_show(show, plex):
     console.print(f"Insgesamt {total_episodes} Episode(n) in {len(seasons)} Staffel(n)")
     
     episode_count = 0
+    skipped_count = 0
     for season in seasons:
         for episode in season.episodes():
             episode_count += 1
             console.print(f"\n[cyan]Episode {episode_count}/{total_episodes}[/cyan]")
-            download_episode(episode, show, plex, show_dir)
+            
+            # Prüfe ob Episode bereits existiert
+            if not episode.media or not episode.media[0].parts:
+                console.print(f"[yellow]Keine Mediendatei für {episode.title}[/yellow]")
+                continue
+                
+            part = episode.media[0].parts[0]
+            episode_num = f"S{episode.seasonNumber:02d}E{episode.index:02d}"
+            filename = f"{show.title} - {episode_num} - {episode.title}.{part.container}"
+            filename = sanitize_filename(filename)
+            filepath = show_dir / filename
+            
+            if filepath.exists():
+                console.print(f"[yellow]Bereits vorhanden, überspringe: {filename}[/yellow]")
+                skipped_count += 1
+                continue
+                
+            download_episode(episode, show, plex, show_dir, skip_existing_check=True)
     
-    console.print(f"\n[bold green]Alle Episoden heruntergeladen! 🎉[/bold green]")
+    console.print(f"\n[bold green]Fertig! {episode_count - skipped_count} Episode(n) heruntergeladen, {skipped_count} übersprungen. 🎉[/bold green]")
 
-def download_episode(episode, show, plex, custom_dir=None):
+def download_episode(episode, show, plex, custom_dir=None, skip_existing_check=False):
     """Lädt eine einzelne Episode herunter."""
     config = load_config()
     download_dir = custom_dir or Path(config.get("download_path", Path.home() / "Downloads"))
@@ -312,6 +336,12 @@ def download_episode(episode, show, plex, custom_dir=None):
     
     filepath = download_dir / filename
     
+    # Prüfen, ob Datei bereits existiert (nur wenn nicht schon im Batch-Modus übersprungen)
+    if not skip_existing_check and filepath.exists():
+        if not Confirm.ask(f"[yellow]Datei existiert bereits: {filename}. Überschreiben?[/yellow]"):
+            console.print("[yellow]Download übersprungen.[/yellow]")
+            return
+    
     # Download URL generieren
     download_url = plex.url(part.key) + f"?download=1&X-Plex-Token={plex._token}"
     
@@ -321,6 +351,7 @@ def download_episode(episode, show, plex, custom_dir=None):
     # Download mit Requests & Rich Progress Bar
     try:
         response = requests.get(download_url, stream=True)
+        response.raise_for_status()  # Prüfe HTTP Status
         total_size = int(response.headers.get('content-length', 0))
         
         with Progress(
@@ -339,6 +370,13 @@ def download_episode(episode, show, plex, custom_dir=None):
         
         console.print(f"[green]Download abgeschlossen![/green]")
         
+    except requests.exceptions.RequestException as e:
+        console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
+        # Lösche unvollständige Datei
+        if filepath.exists():
+            filepath.unlink()
+    except IOError as e:
+        console.print(f"[bold red]Dateisystem-Fehler:[/bold red] {e}")
     except Exception as e:
         console.print(f"[bold red]Download Fehler:[/bold red] {e}")
 
@@ -347,12 +385,26 @@ def sanitize_filename(filename):
     invalid_chars = '<>:"/\\|?*'
     for char in invalid_chars:
         filename = filename.replace(char, '-')
+    # Mehrfache Bindestriche durch einen ersetzen
+    while '--' in filename:
+        filename = filename.replace('--', '-')
+    # Bindestriche am Anfang und Ende entfernen
+    filename = filename.strip('-').strip()
+    # Maximale Länge begrenzen (255 ist typisches Filesystem-Limit)
+    if len(filename) > 200:  # Etwas Puffer für Erweiterung
+        name, ext = filename.rsplit('.', 1) if '.' in filename else (filename, '')
+        filename = name[:200] + ('.' + ext if ext else '')
     return filename
 
 def download_video(video, plex):
     """Lädt das Video mit Fortschrittsbalken herunter."""
     config = load_config()
     download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+    
+    # Prüfen, ob Mediendatei vorhanden ist
+    if not video.media or not video.media[0].parts:
+        console.print(f"[red]Keine Mediendatei gefunden für {video.title}[/red]")
+        return
     
     # Wir nehmen den ersten Teil (Part) der ersten Mediendatei (normalerweise der Hauptfilm)
     part = video.media[0].parts[0]
@@ -361,6 +413,12 @@ def download_video(video, plex):
     filename = f"{video.title} ({video.year}).{part.container}"
     filename = sanitize_filename(filename)
     filepath = download_dir / filename
+    
+    # Prüfen, ob Datei bereits existiert
+    if filepath.exists():
+        if not Confirm.ask(f"[yellow]Datei existiert bereits: {filename}. Überschreiben?[/yellow]"):
+            console.print("[yellow]Download übersprungen.[/yellow]")
+            return
     
     # Download URL generieren (Direct Stream / Original)
     download_url = plex.url(part.key) + f"?download=1&X-Plex-Token={plex._token}"
@@ -371,6 +429,7 @@ def download_video(video, plex):
     # Download mit Requests & Rich Progress Bar
     try:
         response = requests.get(download_url, stream=True)
+        response.raise_for_status()  # Prüfe HTTP Status
         total_size = int(response.headers.get('content-length', 0))
         
         with Progress(
@@ -389,6 +448,13 @@ def download_video(video, plex):
                     
         console.print(f"[bold green]Download abgeschlossen![/bold green] 🎉")
         
+    except requests.exceptions.RequestException as e:
+        console.print(f"[bold red]Netzwerk-Fehler beim Download:[/bold red] {e}")
+        # Lösche unvollständige Datei
+        if filepath.exists():
+            filepath.unlink()
+    except IOError as e:
+        console.print(f"[bold red]Dateisystem-Fehler:[/bold red] {e}")
     except Exception as e:
         console.print(f"[bold red]Download Fehler:[/bold red] {e}")
 
