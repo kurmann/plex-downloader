@@ -11,6 +11,7 @@ Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) 
 
 * **Interaktive Suche:** Suche blitzschnell nach Filmen und TV Shows in deinen Plex-Bibliotheken.
 * **TV Show Support:** Lade ganze Serien oder einzelne Episoden herunter.
+* **Geplanter Download:** Plane Downloads für 2 Uhr morgens mit dem `--at-night` Flag.
 * **Medienserver-Integration:** Automatisches Verschieben von Downloads zum Medienserver (lokal oder per rclone zu NAS/Cloud).
 * **Originalqualität:** Lädt die rohe Videodatei (z. B. MKV, MP4) herunter, ohne Transcodierung oder Qualitätsverlust.
 * **Schicke UI:** Fortschrittsbalken, farbige Ausgaben und formatierte Tabellen.
@@ -81,6 +82,31 @@ plex-dl search "Inception"
 ```
 
 Für TV Shows wirst du gefragt, ob du die ganze Serie oder nur eine bestimmte Episode herunterladen möchtest.
+
+#### Geplanter Download (Nachtmodus)
+
+Du kannst Downloads für 2 Uhr morgens (lokale Zeit) planen:
+
+```bash
+plex-dl search "Inception" --at-night
+
+```
+
+Im Nachtmodus:
+- Wartet die Anwendung aktiv bis 2 Uhr morgens
+- Zeigt die verbleibende Wartezeit alle 60 Sekunden an
+- Führt den Download automatisch um 2 Uhr aus
+- Beendet sich automatisch nach dem Download (auch bei Fehlern)
+- Fehler werden in der Konsole angezeigt und bleiben lesbar
+
+**Beispiel:**
+```bash
+# Normaler Download (sofort)
+plex-dl search "The Matrix"
+
+# Geplanter Download um 2 Uhr morgens
+plex-dl search "The Matrix" --at-night
+```
 
 ### 3. Medienserver-Integration
 
