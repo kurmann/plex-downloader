@@ -58,16 +58,18 @@ pip install -e .
 
 Sobald das Tool installiert ist, steht dir der Befehl `plex-dl` systemweit zur Verfügung.
 
-### 1. Ersteinrichtung (Setup)
+### 1. Ersteinrichtung (Konfiguration)
 
 Bevor du starten kannst, musst du dich einmalig einloggen und den gewünschten Server auswählen.
 
 ```bash
-plex-dl setup
+plex-dl config
 
 ```
 
 *Folge den Anweisungen im Terminal, um dich bei plex.tv einzuloggen und deinen Server zu wählen.*
+
+Du kannst `config` auch später nutzen, um einzelne Einstellungen (Server, Download-Pfad, Medienserver-Pfad) anzupassen, ohne alles neu eingeben zu müssen.
 
 ### 2. Suchen & Herunterladen
 
@@ -82,7 +84,7 @@ Für TV Shows wirst du gefragt, ob du die ganze Serie oder nur eine bestimmte Ep
 
 ### 3. Medienserver-Integration
 
-Bei der Erstkonfiguration (`plex-dl setup`) kannst du optional ein Medienserver-Verzeichnis konfigurieren. Nach jedem erfolgreichen Download werden die Dateien automatisch dorthin verschoben.
+Bei der Erstkonfiguration (`plex-dl config`) kannst du optional ein Medienserver-Verzeichnis konfigurieren. Nach jedem erfolgreichen Download werden die Dateien automatisch dorthin verschoben.
 
 **Beispiele:**
 - Lokaler Pfad: `/mnt/media` oder `~/Media`

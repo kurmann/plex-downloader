@@ -34,43 +34,22 @@ def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         yaml.dump(data, f)
 
-
-
-def get_plex_server() -> PlexServer:
-    """Verbindet sich mit dem Plex Server basierend auf der Config."""
-    config = load_config()
+def configure_plex_account(existing_config):
+    """Konfiguriert nur Plex Account und Server."""
+    console.print("\n[bold cyan]Plex Account Konfiguration[/bold cyan]")
     
-    # Check ob wir bereits configuriert sind
-    if not config.get("token") or not config.get("server_name"):
-        console.print("[yellow]Keine Konfiguration gefunden. Starten Setup...[/yellow]")
-        setup()
-        config = load_config() # Reload nach Setup
+    result = get_plex_credentials_and_server()
+    if result:
+        token, server_name = result
+        existing_config["token"] = token
+        existing_config["server_name"] = server_name
+        save_config(existing_config)
+        console.print(f"[bold green]Plex Account Konfiguration gespeichert![/bold green]")
+        return True
+    return False
 
-    token = config.get("token")
-    server_name = config.get("server_name")
-    
-    # Spinner starten während Verbindung
-    with console.status(f"[bold green]Verbinde mit Server '{server_name}'..."):
-        try:
-            # Wir nutzen MyPlex, um die Ressource zu finden (funktioniert remote & lokal)
-            account = MyPlexAccount(token=token)
-            resource = account.resource(server_name)
-            plex = resource.connect()
-            return plex
-        except Exception as e:
-            console.print(f"[bold red]Fehler bei der Verbindung:[/bold red] {e}")
-            # Falls Token ungültig, Setup anbieten
-            if Confirm.ask("Möchtest du das Setup erneut ausführen?"):
-                setup()
-                return get_plex_server()
-            else:
-                sys.exit(1)
-
-@app.command()
-def setup():
-    """Interaktives Setup für Account und Server-Wahl."""
-    console.print("[bold blue]--- Plex Downloader Setup ---[/bold blue]")
-    
+def get_plex_credentials_and_server():
+    """Fragt Plex Credentials ab und lässt Server auswählen. Gibt (token, server_name) zurück oder None bei Fehler."""
     username = Prompt.ask("Plex Benutzername/Email")
     password = Prompt.ask("Plex Passwort", password=True)
     
@@ -85,82 +64,231 @@ def setup():
         
         if not resources:
             console.print("[red]Keine Server gefunden![/red]")
-            return
-
+            return None
+        
         console.print("\nVerfügbare Server:")
         for idx, res in enumerate(resources, 1):
-            # Wir zeigen einfach nur den Namen an, das ist sicherer
             console.print(f"{idx}. [bold]{res.name}[/bold] - {res.productVersion}")
-            
+        
         choice = int(Prompt.ask("Wähle einen Server (Nummer)", choices=[str(i) for i in range(1, len(resources)+1)]))
         selected_server = resources[choice-1]
         
-        # Download-Pfad abfragen
-        default_download_path = str(Path.home() / "Downloads")
-        download_path = Prompt.ask(
-            "Download-Verzeichnis (temporär)", 
-            default=default_download_path
-        )
-        
-        # Pfad validieren und ggf. erstellen
-        download_dir = Path(download_path).expanduser().resolve()
-        if not download_dir.exists():
-            if Confirm.ask(f"Das Verzeichnis existiert nicht. Soll es erstellt werden?"):
-                download_dir.mkdir(parents=True, exist_ok=True)
-                console.print(f"[green]Verzeichnis erstellt: {download_dir}[/green]")
-            else:
-                console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
-                download_dir = Path(default_download_path)
-                download_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Medienserver-Pfad abfragen
-        default_media_path = str(Path.home() / "Media")
-        media_path = Prompt.ask(
-            "Medienserver-Verzeichnis (Ziel für fertige Downloads, z.B. lokaler Pfad oder rclone remote wie 'mynas:media')",
-            default=default_media_path
-        )
-        
-        # Prüfe ob es sich um einen rclone remote handelt (enthält ":")
-        is_remote = ":" in media_path and not media_path.startswith("/") and not (len(media_path) > 1 and media_path[1] == ":")
-        
-        if is_remote:
-            # Für rclone remotes speichern wir den Pfad direkt als String
-            console.print(f"[cyan]Erkannte rclone remote: {media_path}[/cyan]")
-            media_dir_str = media_path
-        else:
-            # Für lokale Pfade validieren und ggf. erstellen
-            media_dir = Path(media_path).expanduser().resolve()
-            if not media_dir.exists():
-                if Confirm.ask(f"Das Verzeichnis existiert nicht. Soll es erstellt werden?"):
-                    media_dir.mkdir(parents=True, exist_ok=True)
-                    console.print(f"[green]Verzeichnis erstellt: {media_dir}[/green]")
-                else:
-                    console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
-                    media_dir = Path(default_media_path)
-                    media_dir.mkdir(parents=True, exist_ok=True)
-            media_dir_str = str(media_dir)
-        
-        # Config speichern
-        config = {
-            "token": account.authenticationToken,
-            "server_name": selected_server.name,
-            "download_path": str(download_dir),
-            "media_server_path": media_dir_str
-        }
-        save_config(config)
-        console.print(f"[bold green]Konfiguration gespeichert unter {CONFIG_FILE}![/bold green]")
+        return (account.authenticationToken, selected_server.name)
         
     except Unauthorized:
         console.print("[bold red]Login fehlgeschlagen. Falsches Passwort?[/bold red]")
+        return None
     except Exception as e:
         console.print(f"[bold red]Fehler:[/bold red] {e}")
+        return None
+
+def configure_download_path(existing_config):
+    """Konfiguriert nur Download-Verzeichnis."""
+    console.print("\n[bold cyan]Download-Verzeichnis Konfiguration[/bold cyan]")
+    
+    default_download_path = existing_config.get("download_path", str(Path.home() / "Downloads"))
+    download_path = Prompt.ask(
+        "Download-Verzeichnis (temporär)", 
+        default=default_download_path
+    )
+    
+    result = validate_and_create_directory(download_path, "Download-Verzeichnis")
+    if result:
+        existing_config["download_path"] = result
+        save_config(existing_config)
+        console.print(f"[bold green]Download-Verzeichnis gespeichert![/bold green]")
+        return True
+    return False
+
+def configure_media_path(existing_config):
+    """Konfiguriert nur Medienserver-Verzeichnis."""
+    console.print("\n[bold cyan]Medienserver-Verzeichnis Konfiguration[/bold cyan]")
+    
+    default_media_path = existing_config.get("media_server_path", str(Path.home() / "Media"))
+    media_path = Prompt.ask(
+        "Medienserver-Verzeichnis (Ziel für fertige Downloads, z.B. lokaler Pfad oder rclone remote wie 'mynas:media') (ohne Quotes eingeben)",
+        default=default_media_path
+    )
+    
+    result = validate_media_path(media_path)
+    if result:
+        existing_config["media_server_path"] = result
+        save_config(existing_config)
+        console.print(f"[bold green]Medienserver-Verzeichnis gespeichert![/bold green]")
+        return True
+    return False
+
+def validate_and_create_directory(path_str, path_description="Verzeichnis"):
+    """Validiert und erstellt ein lokales Verzeichnis. Gibt den Pfad als String zurück oder None."""
+    directory = Path(path_str).expanduser().resolve()
+    if not directory.exists():
+        if Confirm.ask(f"Das Verzeichnis existiert nicht. Soll es erstellt werden?"):
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+                console.print(f"[green]Verzeichnis erstellt: {directory}[/green]")
+                return str(directory)
+            except Exception as e:
+                console.print(f"[red]Fehler beim Erstellen des Verzeichnisses: {e}[/red]")
+                return None
+        else:
+            console.print(f"[yellow]{path_description} wurde nicht konfiguriert[/yellow]")
+            return None
+    return str(directory)
+
+def validate_media_path(media_path):
+    """Validiert einen Medienserver-Pfad (lokal oder rclone remote). Gibt den Pfad als String zurück oder None."""
+    # Prüfe ob es sich um einen rclone remote handelt (enthält ":")
+    # Sichere Prüfung für Windows Laufwerksbuchstaben
+    is_remote = ":" in media_path and not media_path.startswith("/") and not (len(media_path) >= 2 and media_path[1] == ":")
+    
+    if is_remote:
+        # Für rclone remotes speichern wir den Pfad direkt als String
+        console.print(f"[cyan]Erkannte rclone remote: {media_path}[/cyan]")
+        return media_path
+    else:
+        # Für lokale Pfade validieren und ggf. erstellen
+        return validate_and_create_directory(media_path, "Medienserver-Verzeichnis")
+
+
+
+def get_plex_server() -> PlexServer:
+    """Verbindet sich mit dem Plex Server basierend auf der Config."""
+    config_data = load_config()
+    
+    # Check ob wir bereits configuriert sind
+    if not config_data.get("token") or not config_data.get("server_name"):
+        console.print("[yellow]Keine Konfiguration gefunden. Starte Konfiguration...[/yellow]")
+        config()
+        config_data = load_config() # Reload nach Config
+
+    token = config_data.get("token")
+    server_name = config_data.get("server_name")
+    
+    # Spinner starten während Verbindung
+    with console.status(f"[bold green]Verbinde mit Server '{server_name}'..."):
+        try:
+            # Wir nutzen MyPlex, um die Ressource zu finden (funktioniert remote & lokal)
+            account = MyPlexAccount(token=token)
+            resource = account.resource(server_name)
+            plex = resource.connect()
+            return plex
+        except Exception as e:
+            console.print(f"[bold red]Fehler bei der Verbindung:[/bold red] {e}")
+            # Falls Token ungültig, Config anbieten
+            if Confirm.ask("Möchtest du die Konfiguration erneut ausführen?"):
+                config()
+                return get_plex_server()
+            else:
+                sys.exit(1)
+
+@app.command()
+def config():
+    """Interaktive Konfiguration für Account, Server-Wahl und Pfade."""
+    console.print("[bold blue]--- Plex Downloader Konfiguration ---[/bold blue]")
+    
+    # Lade existierende Konfiguration
+    existing_config = load_config()
+    has_config = bool(existing_config.get("token"))
+    
+    # Wenn bereits konfiguriert, zeige Menü zur Auswahl
+    if has_config:
+        console.print("\n[green]Bestehende Konfiguration gefunden.[/green]")
+        console.print("\nWas möchtest du konfigurieren?")
+        console.print("1. Plex Account (Server & Token)")
+        console.print("2. Download-Verzeichnis")
+        console.print("3. Medienserver-Verzeichnis")
+        console.print("4. Alles neu konfigurieren")
+        console.print("q. Abbruch")
+        
+        choice = Prompt.ask(
+            "Wähle eine Option",
+            choices=["1", "2", "3", "4", "q"],
+            default="q"
+        )
+        
+        if choice == "q":
+            return
+        elif choice == "1":
+            configure_plex_account(existing_config)
+            return
+        elif choice == "2":
+            configure_download_path(existing_config)
+            return
+        elif choice == "3":
+            configure_media_path(existing_config)
+            return
+        # choice == "4" falls through to full configuration
+    
+    # Volle Konfiguration (Ersteinrichtung oder Option 4)
+    result = get_plex_credentials_and_server()
+    if not result:
+        return
+    
+    token, server_name = result
+    
+    # Download-Pfad abfragen
+    default_download_path = str(Path.home() / "Downloads")
+    download_path = Prompt.ask(
+        "Download-Verzeichnis (temporär)", 
+        default=default_download_path
+    )
+    
+    # Pfad validieren und ggf. erstellen
+    download_dir_str = validate_and_create_directory(download_path, "Download-Verzeichnis")
+    if not download_dir_str:
+        # Fallback zum Standard-Verzeichnis
+        console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
+        download_dir = Path(default_download_path)
+        download_dir.mkdir(parents=True, exist_ok=True)
+        download_dir_str = str(download_dir)
+    
+    # Medienserver-Pfad abfragen
+    default_media_path = str(Path.home() / "Media")
+    media_path = Prompt.ask(
+        "Medienserver-Verzeichnis (Ziel für fertige Downloads, z.B. lokaler Pfad oder rclone remote wie 'mynas:media')",
+        default=default_media_path
+    )
+    
+    media_dir_str = validate_media_path(media_path)
+    if not media_dir_str:
+        # Fallback zum Standard-Verzeichnis
+        console.print("[yellow]Verwende Standard-Verzeichnis[/yellow]")
+        media_dir = Path(default_media_path)
+        media_dir.mkdir(parents=True, exist_ok=True)
+        media_dir_str = str(media_dir)
+    
+    # Config speichern
+    config_data = {
+        "token": token,
+        "server_name": server_name,
+        "download_path": download_dir_str,
+        "media_server_path": media_dir_str
+    }
+    save_config(config_data)
+    console.print(f"[bold green]Konfiguration gespeichert unter {CONFIG_FILE}![/bold green]")
+
+@app.command()
+def setup():
+    """Alias für 'config' - wird aus Kompatibilitätsgründen beibehalten."""
+    console.print("[yellow]Hinweis: 'setup' wurde umbenannt zu 'config'. Bitte verwende zukünftig 'plex-dl config'.[/yellow]\n")
+    config()
 
 @app.command()
 def search(query: str):
     """Sucht nach Filmen und TV Shows und bietet Download an."""
+    # Prüfe ob Konfiguration existiert
+    config_data = load_config()
+    if not config_data.get("token") or not config_data.get("server_name"):
+        console.print("[yellow]Keine Konfiguration gefunden. Starte Konfiguration...[/yellow]")
+        config()
+        config_data = load_config()
+        # Prüfe erneut ob Konfiguration nun vorhanden ist
+        if not config_data.get("token") or not config_data.get("server_name"):
+            console.print("[red]Konfiguration unvollständig. Bitte führe 'plex-dl config' aus.[/red]")
+            sys.exit(1)
+    
     # Cleanup alte temp Dateien vor der Suche
-    config = load_config()
-    cleanup_temp_files(config.get("download_path"))
+    cleanup_temp_files(config_data.get("download_path"))
     
     plex = get_plex_server()
     
@@ -211,10 +339,10 @@ def search(query: str):
         if 0 <= selection_idx < len(results):
             selected_item = results[selection_idx]
             if selected_item.type == 'movie':
-                config = load_config()
-                download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+                config_data = load_config()
+                download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
                 # Keep media_server_path as string to support both local and remote paths
-                media_server_path = config.get("media_server_path")
+                media_server_path = config_data.get("media_server_path")
                 download_video(selected_item, plex, download_dir, media_server_path)
             else:  # show
                 handle_show_download(selected_item, plex)
@@ -302,10 +430,10 @@ def select_and_download_episode(show, plex):
         episode_idx = int(episode_choice) - 1
         if 0 <= episode_idx < len(episodes):
             # Erstelle einen Ordner für die Show (Konsistenz mit vollständigem Download)
-            config = load_config()
-            download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+            config_data = load_config()
+            download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
             # Keep media_server_path as string to support both local and remote paths
-            media_server_path = config.get("media_server_path")
+            media_server_path = config_data.get("media_server_path")
             show_dir = download_dir / sanitize_filename(show.title)
             show_dir.mkdir(parents=True, exist_ok=True)
             
@@ -317,10 +445,10 @@ def select_and_download_episode(show, plex):
 
 def download_entire_show(show, plex):
     """Lädt alle Episoden einer TV-Show herunter."""
-    config = load_config()
-    download_dir = Path(config.get("download_path", Path.home() / "Downloads"))
+    config_data = load_config()
+    download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
     # Keep media_server_path as string to support both local and remote paths
-    media_server_path = config.get("media_server_path")
+    media_server_path = config_data.get("media_server_path")
     
     # Erstelle einen Ordner für die Show
     show_dir = download_dir / sanitize_filename(show.title)
