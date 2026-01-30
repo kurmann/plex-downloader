@@ -676,6 +676,7 @@ def download_from_episode_onwards(show, plex, at_night: bool = False):
             # Download-Statistik
             downloaded_count = 0
             skipped_count = 0
+            failed_count = 0
             
             # Lade alle Episoden ab der ausgewählten bis zum Ende
             for episode_idx in range(start_episode_idx, len(episodes)):
@@ -687,6 +688,7 @@ def download_from_episode_onwards(show, plex, at_night: bool = False):
                 # Prüfe ob Episode bereits existiert
                 if not episode.media or not episode.media[0].parts:
                     console.print(f"[yellow]Keine Mediendatei für {episode.title}[/yellow]")
+                    skipped_count += 1
                     continue
                     
                 part = episode.media[0].parts[0]
@@ -701,8 +703,14 @@ def download_from_episode_onwards(show, plex, at_night: bool = False):
                 
                 if download_episode(episode, show, plex, show_dir, skip_existing_check=True, media_server_path=media_server_path):
                     downloaded_count += 1
+                else:
+                    failed_count += 1
             
-            console.print(f"\n[bold green]Fertig! {downloaded_count} Episode(n) heruntergeladen, {skipped_count} übersprungen. 🎉[/bold green]")
+            # Detaillierte Statistik
+            console.print(f"\n[bold green]Fertig! {downloaded_count} Episode(n) heruntergeladen, {skipped_count} übersprungen", end="")
+            if failed_count > 0:
+                console.print(f", {failed_count} fehlgeschlagen", end="")
+            console.print(". 🎉[/bold green]")
             
             # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
             if at_night:
