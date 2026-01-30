@@ -707,10 +707,11 @@ def download_from_episode_onwards(show, plex, at_night: bool = False):
                     failed_count += 1
             
             # Detaillierte Statistik
-            console.print(f"\n[bold green]Fertig! {downloaded_count} Episode(n) heruntergeladen, {skipped_count} übersprungen", end="")
+            summary = f"\n[bold green]Fertig! {downloaded_count} Episode(n) heruntergeladen, {skipped_count} übersprungen"
             if failed_count > 0:
-                console.print(f", {failed_count} fehlgeschlagen", end="")
-            console.print(". 🎉[/bold green]")
+                summary += f", {failed_count} fehlgeschlagen"
+            summary += ". 🎉[/bold green]"
+            console.print(summary)
             
             # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
             if at_night:
