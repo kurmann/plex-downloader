@@ -68,7 +68,7 @@ def wait_until_2am():
     
     try:
         # Warte in Intervallen und zeige Fortschritt
-        interval = 60  # Alle 60 Sekunden aktualisieren
+        interval = 3600  # Alle 3600 Sekunden (1 Stunde) aktualisieren
         elapsed = 0
         
         while elapsed < wait_seconds:
@@ -433,7 +433,7 @@ def search(query: str):
     except ValueError:
         console.print("[red]Bitte eine Zahl eingeben.[/red]")
 
-def handle_show_download(show, plex):
+def handle_show_download(show, plex, at_night: bool = False):
     """Behandelt den Download einer TV-Show."""
     console.print(f"\n[bold magenta]{show.title}[/bold magenta]")
     console.print("\nWas möchtest du herunterladen?")
@@ -460,7 +460,7 @@ def handle_show_download(show, plex):
             console.print("[yellow]Download abgebrochen.[/yellow]")
     elif choice == "2":
         # Bestimmte Episode auswählen
-        select_and_download_episode(show, plex, at_night)
+        select_and_download_episode(show, plex)
     elif choice == "3":
         # Ab bestimmter Episode bis Ende der Staffel
         download_from_episode_onwards(show, plex, at_night)
