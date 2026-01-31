@@ -451,11 +451,12 @@ def handle_show_download(show, plex, at_night: bool = False):
     console.print("\nWas möchtest du herunterladen?")
     console.print("1. Ganze Serie")
     console.print("2. Bestimmte Episode")
+    console.print("3. Ab bestimmter Episode bis Ende der Staffel")
     console.print("q. Abbruch")
     
     choice = Prompt.ask(
         "Wähle eine Option",
-        choices=["1", "2", "q"],
+        choices=["1", "2", "3", "q"],
         default="q"
     )
     
@@ -481,6 +482,9 @@ def handle_show_download(show, plex, at_night: bool = False):
     elif choice == "2":
         # Bestimmte Episode auswählen
         select_and_download_episode(show, plex, at_night)
+    elif choice == "3":
+        # Ab bestimmter Episode bis Ende der Staffel
+        download_from_episode_onwards(show, plex, at_night)
 
 def select_and_download_episode(show, plex, at_night: bool = False):
     """Lässt den Benutzer eine bestimmte Episode auswählen und lädt sie herunter."""
@@ -561,6 +565,153 @@ def select_and_download_episode(show, plex, at_night: bool = False):
             show_dir.mkdir(parents=True, exist_ok=True)
             
             download_episode(episodes[episode_idx], show, plex, show_dir, skip_existing_check=False, media_server_path=media_server_path)
+            
+            # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
+            if at_night:
+                console.print("\n[bold green]Download abgeschlossen. Anwendung wird beendet.[/bold green]")
+                sys.exit(0)
+        else:
+            console.print("[red]Ungültige Auswahl.[/red]")
+            # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+            if at_night:
+                console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
+    except ValueError:
+        console.print("[red]Bitte eine Zahl eingeben.[/red]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
+
+def download_from_episode_onwards(show, plex, at_night: bool = False):
+    """Lädt alle Episoden ab einer bestimmten Episode bis zum Ende der Staffel herunter."""
+    seasons = show.seasons()
+    
+    # Staffel auswählen
+    console.print("\n[bold]Verfügbare Staffeln:[/bold]")
+    for idx, season in enumerate(seasons, 1):
+        console.print(f"{idx}. {season.title} ({len(season.episodes())} Episoden)")
+    
+    season_choice = Prompt.ask(
+        "Welche Staffel? (Nummer eingeben, 'q' für Abbruch)",
+        default="q"
+    )
+    
+    if season_choice.lower() == "q":
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
+        return
+    
+    try:
+        season_idx = int(season_choice) - 1
+        if 0 <= season_idx < len(seasons):
+            selected_season = seasons[season_idx]
+        else:
+            console.print("[red]Ungültige Auswahl.[/red]")
+            # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+            if at_night:
+                console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                sys.exit(0)
+            return
+    except ValueError:
+        console.print("[red]Bitte eine Zahl eingeben.[/red]")
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
+        return
+    
+    # Start-Episode auswählen
+    episodes = selected_season.episodes()
+    console.print(f"\n[bold]Episoden in {selected_season.title}:[/bold]")
+    
+    table = Table()
+    table.add_column("Nr.", style="cyan", justify="right")
+    table.add_column("Episode", style="magenta")
+    table.add_column("Titel", style="green")
+    
+    for idx, episode in enumerate(episodes, 1):
+        episode_num = f"S{episode.seasonNumber:02d}E{episode.index:02d}"
+        table.add_row(str(idx), episode_num, episode.title)
+    
+    console.print(table)
+    
+    start_episode_choice = Prompt.ask(
+        "Ab welcher Episode herunterladen? (Nummer eingeben, 'q' für Abbruch)",
+        default="q"
+    )
+    
+    if start_episode_choice.lower() == "q":
+        # Beende die Anwendung automatisch wenn --at-night verwendet wurde
+        if at_night:
+            console.print("[yellow]Anwendung wird beendet.[/yellow]")
+            sys.exit(0)
+        return
+    
+    try:
+        start_episode_idx = int(start_episode_choice) - 1
+        if 0 <= start_episode_idx < len(episodes):
+            # Bestätigung
+            episodes_to_download = len(episodes) - start_episode_idx
+            start_ep_num = f"S{episodes[start_episode_idx].seasonNumber:02d}E{episodes[start_episode_idx].index:02d}"
+            if not Confirm.ask(f"Möchtest du {episodes_to_download} Episode(n) ab {start_ep_num} herunterladen?"):
+                console.print("[yellow]Download abgebrochen.[/yellow]")
+                if at_night:
+                    console.print("[yellow]Anwendung wird beendet.[/yellow]")
+                    sys.exit(0)
+                return
+            
+            # Download-Verzeichnis vorbereiten
+            config_data = load_config()
+            download_dir = Path(config_data.get("download_path", Path.home() / "Downloads"))
+            # Keep media_server_path as string to support both local and remote paths
+            media_server_path = config_data.get("media_server_path")
+            show_dir = download_dir / sanitize_filename(show.title)
+            show_dir.mkdir(parents=True, exist_ok=True)
+            
+            console.print(f"\n[bold cyan]Lade Episoden ab {start_ep_num} herunter...[/bold cyan]")
+            
+            # Download-Statistik
+            downloaded_count = 0
+            skipped_count = 0
+            failed_count = 0
+            
+            # Lade alle Episoden ab der ausgewählten bis zum Ende
+            for episode_idx in range(start_episode_idx, len(episodes)):
+                episode = episodes[episode_idx]
+                episode_num = f"S{episode.seasonNumber:02d}E{episode.index:02d}"
+                
+                console.print(f"\n[cyan]Episode {episode_idx - start_episode_idx + 1}/{episodes_to_download}: {episode_num}[/cyan]")
+                
+                # Prüfe ob Episode bereits existiert
+                if not episode.media or not episode.media[0].parts:
+                    console.print(f"[yellow]Keine Mediendatei für {episode.title}[/yellow]")
+                    skipped_count += 1
+                    continue
+                    
+                part = episode.media[0].parts[0]
+                filename = f"{show.title} - {episode_num} - {episode.title}.{part.container}"
+                filename = sanitize_filename(filename)
+                filepath = show_dir / filename
+                
+                if filepath.exists():
+                    console.print(f"[yellow]Bereits vorhanden, überspringe: {filename}[/yellow]")
+                    skipped_count += 1
+                    continue
+                
+                if download_episode(episode, show, plex, show_dir, skip_existing_check=True, media_server_path=media_server_path):
+                    downloaded_count += 1
+                else:
+                    failed_count += 1
+            
+            # Detaillierte Statistik
+            summary = f"\n[bold green]Fertig! {downloaded_count} Episode(n) heruntergeladen, {skipped_count} übersprungen"
+            if failed_count > 0:
+                summary += f", {failed_count} fehlgeschlagen"
+            summary += ". 🎉[/bold green]"
+            console.print(summary)
             
             # Erfolgreicher Download - beende die Anwendung wenn --at-night verwendet wurde
             if at_night:

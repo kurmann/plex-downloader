@@ -10,7 +10,7 @@ Entwickelt von Patrick Kurmann mit Python, [Typer](https://typer.tiangolo.com/) 
 ## Features
 
 * **Interaktive Suche:** Suche blitzschnell nach Filmen und TV Shows in deinen Plex-Bibliotheken.
-* **TV Show Support:** Lade ganze Serien oder einzelne Episoden herunter.
+* **TV Show Support:** Lade ganze Serien, einzelne Episoden oder alle Episoden ab einer bestimmten Episode bis zum Ende der Staffel herunter.
 * **Geplanter Download:** Plane Downloads für 2 Uhr morgens mit dem `--at-night` Flag.
 * **Medienserver-Integration:** Automatisches Verschieben von Downloads zum Medienserver (lokal oder per rclone zu NAS/Cloud).
 * **Originalqualität:** Lädt die rohe Videodatei (z. B. MKV, MP4) herunter, ohne Transcodierung oder Qualitätsverlust.
@@ -81,7 +81,7 @@ plex-dl search "Inception"
 
 ```
 
-Für TV Shows wirst du gefragt, ob du die ganze Serie oder nur eine bestimmte Episode herunterladen möchtest.
+Für TV Shows wirst du gefragt, ob du die ganze Serie, nur eine bestimmte Episode oder alle Episoden ab einer bestimmten Episode bis zum Ende der Staffel herunterladen möchtest.
 
 #### Geplanter Download (Nachtmodus)
 
