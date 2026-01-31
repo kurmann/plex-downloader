@@ -85,27 +85,28 @@ Für TV Shows wirst du gefragt, ob du die ganze Serie, nur eine bestimmte Episod
 
 #### Geplanter Download (Nachtmodus)
 
-Du kannst Downloads für 2 Uhr morgens (lokale Zeit) planen:
-
-```bash
-plex-dl search "Inception" --at-night
+Nach der Auswahl des gewünschten Inhalts wirst du interaktiv gefragt, ob der Download sofort oder um 2 Uhr morgens starten soll:
 
 ```
+Wann möchtest du den Download starten?
+1. Jetzt sofort
+2. Um 2:00 Uhr morgens
+```
 
-Im Nachtmodus:
+Im Nachtmodus (Option 2):
 - Wartet die Anwendung aktiv bis 2 Uhr morgens
 - Zeigt die verbleibende Wartezeit alle 60 Sekunden an
 - Führt den Download automatisch um 2 Uhr aus
-- Beendet sich automatisch nach dem Download (auch bei Fehlern)
-- Fehler werden in der Konsole angezeigt und bleiben lesbar
 
 **Beispiel:**
 ```bash
-# Normaler Download (sofort)
+# Suche nach einem Film
 plex-dl search "The Matrix"
 
-# Geplanter Download um 2 Uhr morgens
-plex-dl search "The Matrix" --at-night
+# Nach der Auswahl des Films wirst du gefragt:
+# "Wann möchtest du den Download starten?"
+# 1. Jetzt sofort
+# 2. Um 2:00 Uhr morgens
 ```
 
 ### 3. Medienserver-Integration
